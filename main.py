@@ -14,32 +14,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-#@app.get('/') #ROUTE
-#async def index() -> dict[str, str]: #ASYNC FUNCTION WITH PROPER RETURN TYPE
-#    return {'hello': 'world'}
 
-#@app.get('/about')
-#async def about() -> str:
-#    return 'AN EXCEPTIONAL COMPANY'
+# =============================================
+# BASIC CRUD ENDPOINTS
+# =============================================
 
-
-#class GenreURLChoices(Enum):    #TO SET ONLY POSSIBLE OPTIONS IN THE ROUTE
-#    ROCK = 'rock'
-#    ELECTRONIC = 'electronic'
-#    METAL = 'metal'
-#    HIP_HOP = 'hip-hop'
-
-
-#Demo data in format --> list[dict{str, str}]
-
-'''
-BANDS = [       
-     {'id': 1, 'name': 'The Kinks', 'genre': 'Rock'},
-     {'id': 2, 'name': 'Aphex Twin', 'genre': 'Electronic' },
-         {'id': 3, 'name': 'Black Sabbath', 'genre': 'Metal', 'albums': [{'title': 'Master of Reality', 'release_date': '1971-07-21'}]},
-     {'id': 4, 'name': 'Wu-Tang Clan', 'genre': 'Hip-Hop'},
-]
-'''
 @app.get('/bands')
 async def bands(genre: Optional[GenreURLChoices] = None, 
                 q: Annotated[Optional[str], Query(max_length=10)] = None,
@@ -52,7 +31,7 @@ async def bands(genre: Optional[GenreURLChoices] = None,
         band_list = [b for b in band_list if q.lower() in b.name.lower()]    
     return band_list
 
-@app.get('/bands/{band_id}') #ROUTE
+@app.get('/bands/{band_id}')
 async def band(band_id: int,
                session: Session = Depends(get_session)               
                ) -> Band:   
@@ -60,30 +39,44 @@ async def band(band_id: int,
   if band is None: 
     raise HTTPException(status_code = 404, detail = 'Band not found')
   return band
- 
-# @app.get('/bands/genre/{genre}')
-# async def bands_for_genre(genre: GenreURLChoices) -> list[dict]:  #NOT USING PYDANTIC HERE
-#     return[
-#       b for b in BANDS if b['genre'].lower() == genre.value
-#     ]
 
+
+# =============================================
+# TRANSACTION: Create band with albums (explicit transaction)
+# =============================================
 
 @app.post('/bands')
 async def create_bands(
    band_data: BandCreate,
    session: Session = Depends(get_session)
-   )-> Band:
-   band = Band(name=band_data.name, genre=band_data.genre)
-   session.add(band)
+   ) -> Band:
+    """
+    Creates a band and its albums within an EXPLICIT TRANSACTION.
+    If any part fails, the entire operation is rolled back.
+    """
+    try:
+        # BEGIN TRANSACTION (explicit)
+        session.exec(text("BEGIN"))
 
-   if band_data.albums:
-      for album in band_data.albums:
-         album_obj = Album(title=album.title, release_date=album.release_date, band=band)
-         session.add(album_obj)       
+        band = Band(name=band_data.name, genre=band_data.genre)
+        session.add(band)
+        session.flush()  # Get the band ID without committing
 
-   session.commit()
-   session.refresh(band)
-   return band
+        if band_data.albums:
+            for album in band_data.albums:
+                album_obj = Album(title=album.title, release_date=album.release_date, band=band)
+                session.add(album_obj)
+
+        # COMMIT TRANSACTION
+        session.exec(text("COMMIT"))
+        session.refresh(band)
+        return band
+
+    except Exception as e:
+        # ROLLBACK TRANSACTION on any error
+        session.exec(text("ROLLBACK"))
+        raise HTTPException(status_code=500, detail=f"Transaction failed: {str(e)}")
+
 
 @app.put('/bands/{band_id}')
 async def update_band(
@@ -118,20 +111,147 @@ async def delete_band(
     session.commit()
     return {"message": "Band deleted successfully"}
 
+
+# =============================================
+# VIEW ENDPOINTS (using SQL Views)
+# =============================================
+
 @app.get('/views/rock_bands')
 async def get_rock_bands(session: Session = Depends(get_session)):
+    """Fetches data from the rock_bands_view SQL VIEW."""
     results = session.exec(text("SELECT * FROM rock_bands_view")).all()
-    # Results is a list of tuples, map them to dictionary for JSON serialization
     return [{"id": r[0], "name": r[1], "genre": r[2], "date": r[3]} for r in results]
 
 @app.get('/views/metal_bands')
 async def get_metal_bands(session: Session = Depends(get_session)):
+    """Fetches data from the metal_bands_view SQL VIEW."""
     results = session.exec(text("SELECT * FROM metal_bands_view")).all()
     return [{"id": r[0], "name": r[1], "genre": r[2], "date": r[3]} for r in results]
 
+
+# =============================================
+# STORED PROCEDURE ENDPOINTS
+# =============================================
+
+@app.get('/procedures/bands_by_genre/{genre}')
+async def get_bands_by_genre_proc(
+    genre: str,
+    session: Session = Depends(get_session)
+):
+    """
+    Calls the get_bands_by_genre() STORED PROCEDURE.
+    Returns bands of a specific genre along with their album count.
+    """
+    # Map display genre to PostgreSQL enum name
+    genre_map = {
+        'rock': 'ROCK', 'electronic': 'ELECTRONIC',
+        'metal': 'METAL', 'hip-hop': 'HIP_HOP'
+    }
+    pg_genre = genre_map.get(genre.lower(), genre.upper())
+    result = session.exec(
+        text("SELECT * FROM get_bands_by_genre(:genre)"),
+        params={"genre": pg_genre}
+    ).all()
+    return [
+        {
+            "band_id": r[0],
+            "band_name": r[1],
+            "band_genre": r[2],
+            "album_count": r[3]
+        }
+        for r in result
+    ]
+
+@app.post('/procedures/transfer_albums')
+async def transfer_albums_proc(
+    from_band_id: int,
+    to_band_id: int,
+    session: Session = Depends(get_session)
+):
+    """
+    Calls the transfer_albums() STORED PROCEDURE.
+    Transfers all albums from one band to another atomically.
+    """
+    try:
+        result = session.exec(
+            text("SELECT * FROM transfer_albums(:from_id, :to_id)"),
+            params={"from_id": from_band_id, "to_id": to_band_id}
+        ).first()
+        session.commit()
+        return {
+            "transferred_count": result[0],
+            "from_band": result[1],
+            "to_band": result[2]
+        }
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# =============================================
+# TRANSACTION ENDPOINT (explicit transaction demo)
+# =============================================
+
+@app.post('/transactions/bulk_create')
+async def bulk_create_bands(
+    bands_data: list[BandCreate],
+    session: Session = Depends(get_session)
+):
+    """
+    Creates multiple bands with their albums in a SINGLE TRANSACTION.
+    If any band creation fails, ALL bands are rolled back.
+    Demonstrates explicit BEGIN / COMMIT / ROLLBACK.
+    """
+    created_bands = []
+    try:
+        # BEGIN TRANSACTION
+        session.exec(text("BEGIN"))
+
+        for band_data in bands_data:
+            band = Band(name=band_data.name, genre=band_data.genre)
+            session.add(band)
+            session.flush()  # Get band ID
+
+            if band_data.albums:
+                for album in band_data.albums:
+                    album_obj = Album(
+                        title=album.title,
+                        release_date=album.release_date,
+                        band=band
+                    )
+                    session.add(album_obj)
+
+            created_bands.append({"id": band.id, "name": band.name})
+
+        # COMMIT TRANSACTION — all bands created successfully
+        session.exec(text("COMMIT"))
+        return {
+            "message": f"Successfully created {len(created_bands)} bands in a single transaction",
+            "bands": created_bands
+        }
+
+    except Exception as e:
+        # ROLLBACK TRANSACTION — none of the bands are created
+        session.exec(text("ROLLBACK"))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Transaction rolled back. No bands were created. Error: {str(e)}"
+        )
+
+
+# =============================================
+# AUDIT LOG ENDPOINT (populated by triggers)
+# =============================================
+
 @app.get('/logs')
 async def get_logs(session: Session = Depends(get_session)) -> list[AuditLog]:
+    """Returns audit logs populated automatically by database TRIGGERS."""
     logs = session.exec(select(AuditLog).order_by(AuditLog.timestamp.desc())).all()
     return logs
+
+
+# =============================================
+# STATIC FILES (Frontend)
+# =============================================
 
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
