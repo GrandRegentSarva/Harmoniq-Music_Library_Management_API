@@ -46,8 +46,32 @@
                     <li>✔ <b>UPDATE:</b> Edit band details</li>
                     <li>✔ <b>DELETE:</b> Remove bands & triggers</li>
                     <li>✔ <b>VIEWS:</b> Filter through SQL Views</li>
-                    <li>✔ <b>TRIGGERS:</b> Audit logging on delete</li>
+                    <li>✔ <b>TRIGGERS:</b> Audit logging (INSERT & DELETE)</li>
+                    <li>✔ <b>STORED PROCS:</b> Genre search & album transfer</li>
+                    <li>✔ <b>TRANSACTIONS:</b> Bulk create with rollback</li>
                 </ul>
+            </div>
+
+            <div class="procedure-section">
+                <h3>Stored Procedures:</h3>
+                <div class="proc-controls">
+                    <select id="procGenreSelect">
+                        <option value="Rock">Rock</option>
+                        <option value="Electronic">Electronic</option>
+                        <option value="Metal">Metal</option>
+                        <option value="Hip-Hop">Hip-Hop</option>
+                    </select>
+                    <button id="callProcBtn" class="btn small-btn">Call get_bands_by_genre()</button>
+                </div>
+                <div id="procResult" class="proc-result"></div>
+
+                <h4 style="margin-top:12px;">Transfer Albums:</h4>
+                <div class="proc-controls">
+                    <input type="number" id="fromBandId" placeholder="From Band ID" style="width:80px;">
+                    <input type="number" id="toBandId" placeholder="To Band ID" style="width:80px;">
+                    <button id="transferBtn" class="btn small-btn">Call transfer_albums()</button>
+                </div>
+                <div id="transferResult" class="proc-result"></div>
             </div>
             
             <div class="notebook-holes"></div>
@@ -106,12 +130,13 @@
         <div class="modal-content logs-content">
             <span class="close-logs-modal">&times;</span>
             <h2>Activity Logs</h2>
-            <p>Delete triggers caught by SQL Trigger:</p>
+            <p>Events caught by SQL Triggers (INSERT & DELETE):</p>
             <table class="logs-table">
                 <thead>
                     <tr>
                         <th>ID</th>
                         <th>Band Name</th>
+                        <th>Action</th>
                         <th>Timestamp (UTC)</th>
                     </tr>
                 </thead>

@@ -15,6 +15,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const metalViewBtn = document.getElementById('metalViewBtn');
     const allViewBtn = document.getElementById('allViewBtn');
     
+    // Stored Procedure elements
+    const callProcBtn = document.getElementById('callProcBtn');
+    const procGenreSelect = document.getElementById('procGenreSelect');
+    const procResult = document.getElementById('procResult');
+    const transferBtn = document.getElementById('transferBtn');
+    const transferResult = document.getElementById('transferResult');
+
     const closeModalBtns = document.querySelectorAll('.close-modal, .close-logs-modal');
     
     // Forms
@@ -38,6 +45,48 @@ document.addEventListener('DOMContentLoaded', () => {
     allViewBtn.addEventListener('click', () => {
         searchInput.value = '';
         fetchBands();
+    });
+
+    // Stored Procedure: get_bands_by_genre
+    callProcBtn.addEventListener('click', async () => {
+        const genre = procGenreSelect.value;
+        try {
+            const response = await fetch(`${API_BASE}/procedures/bands_by_genre/${genre}`);
+            const data = await response.json();
+            if (data.length === 0) {
+                procResult.innerHTML = '<em>No bands found for this genre.</em>';
+            } else {
+                procResult.innerHTML = data.map(b => 
+                    `<div class="proc-item">🎸 <b>${b.band_name}</b> (${b.band_genre}) — ${b.album_count} album(s)</div>`
+                ).join('');
+            }
+        } catch (error) {
+            procResult.innerHTML = `<em style="color:red;">Error: ${error.message}</em>`;
+        }
+    });
+
+    // Stored Procedure: transfer_albums
+    transferBtn.addEventListener('click', async () => {
+        const fromId = document.getElementById('fromBandId').value;
+        const toId = document.getElementById('toBandId').value;
+        if (!fromId || !toId) {
+            transferResult.innerHTML = '<em style="color:red;">Please enter both band IDs.</em>';
+            return;
+        }
+        try {
+            const response = await fetch(`${API_BASE}/procedures/transfer_albums?from_band_id=${fromId}&to_band_id=${toId}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (response.ok) {
+                transferResult.innerHTML = `<div class="proc-item">✅ Transferred <b>${data.transferred_count}</b> album(s) from <b>${data.from_band}</b> → <b>${data.to_band}</b></div>`;
+                fetchBands(); // Refresh
+            } else {
+                transferResult.innerHTML = `<em style="color:red;">${data.detail}</em>`;
+            }
+        } catch (error) {
+            transferResult.innerHTML = `<em style="color:red;">Error: ${error.message}</em>`;
+        }
     });
 
     closeModalBtns.forEach(btn => {
@@ -113,6 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3 class="card-title">${band.name}</h3>
                     <p class="card-desc">Genre: ${band.genre}</p>
                     ${albumsText}
+                    ${!isView ? `<p class="band-id-info">ID: ${band.id}</p>` : ''}
                 </div>
                 <div class="card-actions">
                     <button class="action-btn edit-btn" onclick="editBand(${band.id}, '${band.name.replace(/'/g, "\\'")}', '${band.genre}')">✏</button>
@@ -217,13 +267,15 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.innerHTML = '';
             
             if(logs.length === 0){
-                tbody.innerHTML = '<tr><td colspan="3">No logs available. Try deleting a band!</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4">No logs available. Try adding or deleting a band!</td></tr>';
             } else {
                 logs.forEach(log => {
                     const tr = document.createElement('tr');
+                    const actionClass = log.action === 'DELETE' ? 'action-delete' : 'action-insert';
                     tr.innerHTML = `
                         <td>${log.id}</td>
                         <td>${log.band_name}</td>
+                        <td><span class="${actionClass}">${log.action}</span></td>
                         <td>${new Date(log.timestamp).toLocaleString()}</td>
                     `;
                     tbody.appendChild(tr);

@@ -294,3 +294,80 @@ body {
     border-bottom: 2px dashed #ccc;
     text-align: left;
 }
+
+/* Action badges in logs */
+.action-delete {
+    background: var(--coral);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.action-insert {
+    background: #4caf50;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+/* Band ID info on cards */
+.band-id-info {
+    font-size: 1rem;
+    opacity: 0.7;
+    margin-top: 0.3rem;
+}
+
+/* Stored Procedure Section */
+.procedure-section {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 2px dashed #ccc;
+}
+
+.procedure-section h3 {
+    font-family: var(--font-hand-alt);
+    font-size: 1.6rem;
+    margin-bottom: 0.8rem;
+}
+
+.procedure-section h4 {
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+}
+
+.proc-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.proc-controls select,
+.proc-controls input {
+    padding: 0.3rem 0.5rem;
+    font-family: var(--font-hand);
+    font-size: 1.1rem;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+}
+
+.small-btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.95rem;
+}
+
+.proc-result {
+    margin-top: 0.5rem;
+    font-size: 1.1rem;
+    min-height: 1.5rem;
+}
+
+.proc-item {
+    padding: 4px 0;
+    border-bottom: 1px dashed #ddd;
+}
